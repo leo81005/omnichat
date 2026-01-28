@@ -35,6 +35,11 @@
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "PolyGPT needs access to your microphone for voice input in ChatGPT and other chat services."
+      },
       "target": [
         {
           "target": "dmg",

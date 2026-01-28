@@ -1,10 +1,26 @@
-const { app, ipcMain } = require('electron');
+const { app, ipcMain, session } = require('electron');
 const windowManager = require('./window-manager');
 
 let mainWindow;
 let currentZoomFactor = 1.0;
 
 app.on('ready', async () => {
+  // Handle permissions for media (microphone)
+  session.fromPartition('persist:shared').setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+
+  session.fromPartition('persist:shared').setPermissionCheckHandler((webContents, permission, origin) => {
+    if (permission === 'media') {
+      return true;
+    }
+    return false;
+  });
+
   mainWindow = await windowManager.createWindow();
 
   // IPC handler for text updates from renderer
