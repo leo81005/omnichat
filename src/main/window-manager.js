@@ -28,6 +28,12 @@ const PROVIDERS = {
     name: 'Claude',
     userAgent: null,
   },
+  grok: {
+    url: 'https://x.com/i/grok',
+    preload: 'grok-preload.js',
+    name: 'Grok',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+  },
 };
 
 // Position keys
@@ -49,7 +55,7 @@ function loadProviderConfig() {
   // Return default configuration
   return {
     topLeft: 'claude',
-    topRight: 'perplexity',
+    topRight: 'grok',
     bottomLeft: 'chatgpt',
     bottomRight: 'gemini',
   };
@@ -68,21 +74,28 @@ function saveProviderConfig(config) {
   }
 }
 
-// Create a provider view
 function createProviderView(providerKey, position) {
   const provider = PROVIDERS[providerKey];
   if (!provider) {
     throw new Error(`Unknown provider: ${providerKey}`);
   }
 
+  console.log(`[WindowManager] Creating view for ${providerKey} at ${position}. Preload: ${provider.preload}`);
+
+  const webPreferences = {
+    partition: providerKey === 'grok' ? 'persist:grok' : 'persist:shared',
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: false,
+  };
+
+  if (provider.preload) {
+    webPreferences.preload = path.join(__dirname, `../preload/${provider.preload}`);
+    console.log(`[WindowManager] Set preload path: ${webPreferences.preload}`);
+  }
+
   const view = new WebContentsView({
-    webPreferences: {
-      partition: 'persist:shared',
-      preload: path.join(__dirname, `../preload/${provider.preload}`),
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: false,
-    },
+    webPreferences,
   });
 
   // Set user agent if specified

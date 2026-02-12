@@ -73,5 +73,21 @@
       "a[aria-label*='New']",
       "button[title*='New chat']"
     ]
+  },
+  "grok": {
+    "input": [
+      "[data-testid='Grok_Compose_Textarea_ID']",
+      "div[role='textbox'][contenteditable='true']",
+      "textarea"
+    ],
+    "submit": [
+      "[data-testid='Grok_Compose_Send_Button']",
+      "button[aria-label*='Send']",
+      "button[type='submit']"
+    ],
+    "newChat": [
+      "a[href='/i/grok']",
+      "button[aria-label*='New chat']"
+    ]
   }
 }

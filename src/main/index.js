@@ -1,4 +1,4 @@
-const { app, ipcMain, session } = require('electron');
+const { app, ipcMain, session, Menu } = require('electron');
 const windowManager = require('./window-manager');
 
 let mainWindow;
@@ -7,7 +7,7 @@ let currentZoomFactor = 1.0;
 app.on('ready', async () => {
   // Handle permissions for media (microphone)
   session.fromPartition('persist:shared').setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media') {
+    if (permission === 'media' || permission === 'clipboard-read' || permission === 'clipboard-write' || permission === 'clipboard-sanitized-write') {
       callback(true);
     } else {
       callback(false);
@@ -15,11 +15,71 @@ app.on('ready', async () => {
   });
 
   session.fromPartition('persist:shared').setPermissionCheckHandler((webContents, permission, origin) => {
-    if (permission === 'media') {
+    if (permission === 'media' || permission === 'clipboard-read' || permission === 'clipboard-write' || permission === 'clipboard-sanitized-write') {
       return true;
     }
     return false;
   });
+
+  // Create standard application menu for macOS compatibility (Copy/Paste shortcuts)
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' },
+        { type: 'separator' },
+        { role: 'window' }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 
   mainWindow = await windowManager.createWindow();
 
