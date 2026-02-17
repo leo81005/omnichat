@@ -54,10 +54,10 @@ function loadProviderConfig() {
   }
   // Return default configuration
   return {
-    topLeft: 'claude',
-    topRight: 'grok',
-    bottomLeft: 'chatgpt',
-    bottomRight: 'gemini',
+    topLeft: "claude",
+    topRight: "grok",
+    bottomLeft: "chatgpt",
+    bottomRight: "gemini"
   };
 }
 
