@@ -40,14 +40,28 @@ function createSubmitHandler(provider, config, getInputElement, getSubmitElement
     } else {
       const inputElement = getInputElement();
       if (inputElement) {
-        const enterEvent = new KeyboardEvent('keydown', {
+        // Dispatch a robust sequence of events to simulate a real Enter key press
+        const eventOptions = {
           key: 'Enter',
           code: 'Enter',
           keyCode: 13,
+          which: 13,
           bubbles: true,
           cancelable: true,
-        });
-        inputElement.dispatchEvent(enterEvent);
+          composed: true,
+          view: window // Important for some frameworks
+        };
+
+        const keydown = new KeyboardEvent('keydown', eventOptions);
+        const keypress = new KeyboardEvent('keypress', eventOptions);
+        const keyup = new KeyboardEvent('keyup', eventOptions);
+
+        inputElement.dispatchEvent(keydown);
+        inputElement.dispatchEvent(keypress);
+        inputElement.dispatchEvent(keyup);
+        
+        // Some React inputs might need a change event if the value was just set programmatically
+        // but for "Enter" submission, the key events are usually the trigger.
       }
     }
   };
