@@ -13,7 +13,9 @@
     "dev": "electron . --dev",
     "build": "electron-builder"
   },
-  "dependencies": {},
+  "dependencies": {
+    "electron-updater": "^6.7.3"
+  },
   "devDependencies": {
     "electron": "^31.0.0",
     "electron-builder": "^24.9.1"
@@ -21,6 +23,13 @@
   "build": {
     "appId": "com.polygpt.app",
     "productName": "PolyGPT",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ncvgl",
+        "repo": "polygpt"
+      }
+    ],
     "directories": {
       "buildResources": "assets"
     },
@@ -43,7 +52,9 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ]
     },
@@ -52,7 +63,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },

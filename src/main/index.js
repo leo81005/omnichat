@@ -1,4 +1,5 @@
 const { app, ipcMain, session, Menu } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const windowManager = require('./window-manager');
 
 let mainWindow;
@@ -82,6 +83,9 @@ app.on('ready', async () => {
   Menu.setApplicationMenu(menu);
 
   mainWindow = await windowManager.createWindow();
+
+  // Check for updates
+  autoUpdater.checkForUpdatesAndNotify();
 
   // IPC handler for text updates from renderer
   ipcMain.handle('send-text-update', async (event, text) => {
