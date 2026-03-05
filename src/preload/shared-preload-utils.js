@@ -1,0 +1,496 @@
+const { contextBridge, ipcRenderer } = require('electron');
+const path = require('path');
+const fs = require('fs');
+
+function loadConfig() {
+  try {
+    const configPath = path.join(__dirname, '../../config/selectors.json');
+    const configData = fs.readFileSync(configPath, 'utf8');
+    return JSON.parse(configData);
+  } catch (error) {
+    console.error('Failed to load selectors config:', error);
+    return {};
+  }
+}
+
+function findElement(selectors) {
+  if (!Array.isArray(selectors)) {
+    selectors = [selectors];
+  }
+
+  for (const selector of selectors) {
+    try {
+      const element = document.querySelector(selector);
+      if (element) {
+        return element;
+      }
+    } catch (error) {
+      continue;
+    }
+  }
+  return null;
+}
+
+function createSubmitHandler(provider, config, getInputElement, getSubmitElement) {
+  return function submitMessage() {
+    const submitElement = findElement(config[provider]?.submit);
+
+    if (submitElement) {
+      submitElement.click();
+    } else {
+      const inputElement = getInputElement();
+      if (inputElement) {
+        // Dispatch a robust sequence of events to simulate a real Enter key press
+        const eventOptions = {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window // Important for some frameworks
+        };
+
+        const keydown = new KeyboardEvent('keydown', eventOptions);
+        const keypress = new KeyboardEvent('keypress', eventOptions);
+        const keyup = new KeyboardEvent('keyup', eventOptions);
+
+        inputElement.dispatchEvent(keydown);
+        inputElement.dispatchEvent(keypress);
+        inputElement.dispatchEvent(keyup);
+        
+        // Some React inputs might need a change event if the value was just set programmatically
+        // but for "Enter" submission, the key events are usually the trigger.
+      }
+    }
+  };
+}
+
+function setupIPCListeners(provider, config, injectTextFn, submitFn, lastText) {
+  ipcRenderer.on('text-update', (event, text) => {
+    if (text !== lastText.value) {
+      injectTextFn(text);
+    }
+  });
+
+  ipcRenderer.on('submit-message', () => {
+    submitFn();
+  });
+
+  ipcRenderer.on('new-chat', () => {
+    const newChatButton = findElement(config[provider]?.newChat);
+    if (newChatButton) {
+      newChatButton.click();
+    } else {
+      console.warn(`[${provider.charAt(0).toUpperCase() + provider.slice(1)}] New chat button not found`);
+    }
+  });
+}
+
+function setupInputScanner(provider, config, getInputElement, setInputElement, findInputFn) {
+  let scanAttempts = 0;
+  const scanInterval = setInterval(() => {
+    if (!getInputElement() && scanAttempts < 10) {
+      const element = findInputFn ? findInputFn(config[provider]?.input) : findElement(config[provider]?.input);
+      setInputElement(element);
+      scanAttempts++;
+    } else {
+      clearInterval(scanInterval);
+    }
+  }, 500);
+}
+
+function removeExistingControls() {
+  const existingContainer = document.getElementById('omnichat-controls-container');
+  if (existingContainer) {
+    existingContainer.remove();
+  }
+}
+
+function createControlsContainer() {
+  const container = document.createElement('div');
+  container.id = 'omnichat-controls-container';
+  Object.assign(container.style, {
+    all: 'initial',
+    position: 'fixed',
+    top: '10px',
+    right: '10px',
+    display: 'flex',
+    gap: '8px',
+    zIndex: '9999999',
+    pointerEvents: 'auto',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontSize: '14px',
+    fontWeight: 'normal',
+    lineHeight: 'normal',
+    letterSpacing: 'normal',
+    boxSizing: 'border-box',
+    margin: '0',
+  });
+  return container;
+}
+
+function createProviderDropdown() {
+  const dropdownContainer = document.createElement('div');
+  dropdownContainer.id = 'omnichat-provider-dropdown';
+  dropdownContainer.title = 'Switch Provider';
+
+  const selected = document.createElement('div');
+  selected.className = 'dropdown-selected';
+
+  const menu = document.createElement('div');
+  menu.className = 'dropdown-menu';
+  menu.style.display = 'none';
+
+  dropdownContainer.appendChild(selected);
+  dropdownContainer.appendChild(menu);
+
+  return dropdownContainer;
+}
+
+function styleDropdown(dropdown) {
+  const selected = dropdown.querySelector('.dropdown-selected');
+  const menu = dropdown.querySelector('.dropdown-menu');
+
+  Object.assign(dropdown.style, {
+    position: 'relative',
+    cursor: 'pointer',
+    boxSizing: 'border-box',
+    margin: '0',
+  });
+
+  Object.assign(selected.style, {
+    border: 'none',
+    borderRadius: '6px',
+    background: 'rgba(0, 0, 0, 0.5)',
+    color: 'white',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    fontWeight: 'normal',
+    lineHeight: 'normal',
+    letterSpacing: 'normal',
+    padding: '8px 12px',
+    height: '36px',
+    minWidth: '100px',
+    backdropFilter: 'blur(4px)',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    whiteSpace: 'nowrap',
+    userSelect: 'none',
+    boxSizing: 'border-box',
+    margin: '0',
+  });
+
+  Object.assign(menu.style, {
+    position: 'absolute',
+    top: '40px',
+    left: '0',
+    width: '100%',
+    border: 'none',
+    borderRadius: '6px',
+    background: 'rgba(0, 0, 0, 0.9)',
+    backdropFilter: 'blur(4px)',
+    zIndex: '10000000',
+    overflow: 'hidden',
+    boxSizing: 'border-box',
+    margin: '0',
+    padding: '0',
+  });
+}
+
+function populateDropdownOptions(dropdown, viewInfo) {
+  const selected = dropdown.querySelector('.dropdown-selected');
+  const menu = dropdown.querySelector('.dropdown-menu');
+
+  const currentProvider = viewInfo.availableProviders.find(p => p.key === viewInfo.provider);
+  selected.textContent = currentProvider ? currentProvider.name : '';
+
+  viewInfo.availableProviders.forEach(provider => {
+    const option = document.createElement('div');
+    option.className = 'dropdown-option';
+    option.dataset.value = provider.key;
+    option.textContent = provider.name;
+
+    Object.assign(option.style, {
+      padding: '10px 12px',
+      color: 'white',
+      fontSize: '14px',
+      fontFamily: 'inherit',
+      fontWeight: 'normal',
+      lineHeight: 'normal',
+      letterSpacing: 'normal',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+      background: provider.key === viewInfo.provider ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+      boxSizing: 'border-box',
+      margin: '0',
+      border: 'none',
+    });
+
+    option.addEventListener('mouseenter', () => {
+      option.style.background = 'rgba(255, 255, 255, 0.2)';
+    });
+
+    option.addEventListener('mouseleave', () => {
+      option.style.background = provider.key === viewInfo.provider ? 'rgba(255, 255, 255, 0.1)' : 'transparent';
+    });
+
+    menu.appendChild(option);
+  });
+}
+
+function attachDropdownEventListeners(dropdown, viewInfo) {
+  const selected = dropdown.querySelector('.dropdown-selected');
+  const menu = dropdown.querySelector('.dropdown-menu');
+
+  let hideTimeout;
+
+  const showMenu = () => {
+    if (hideTimeout) clearTimeout(hideTimeout);
+    selected.style.background = 'rgba(0, 0, 0, 0.7)';
+    menu.style.display = 'block';
+  };
+
+  const hideMenu = () => {
+    hideTimeout = setTimeout(() => {
+      selected.style.background = 'rgba(0, 0, 0, 0.5)';
+      menu.style.display = 'none';
+    }, 100);
+  };
+
+  dropdown.addEventListener('mouseenter', showMenu);
+  dropdown.addEventListener('mouseleave', hideMenu);
+  menu.addEventListener('mouseenter', showMenu);
+  menu.addEventListener('mouseleave', hideMenu);
+
+  menu.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('dropdown-option')) {
+      const newProvider = e.target.dataset.value;
+      selected.textContent = e.target.textContent;
+      await ipcRenderer.invoke('change-provider', viewInfo.position, newProvider);
+      if (hideTimeout) clearTimeout(hideTimeout);
+      selected.style.background = 'rgba(0, 0, 0, 0.5)';
+      menu.style.display = 'none';
+    }
+  });
+}
+
+function createSupersizeButton() {
+  const button = document.createElement('button');
+  button.id = 'omnichat-supersize-btn';
+  button.title = 'Supersize / Restore';
+  return button;
+}
+
+function styleButton(button) {
+  Object.assign(button.style, {
+    border: 'none',
+    borderRadius: '6px',
+    background: 'rgba(0, 0, 0, 0.5)',
+    color: 'white',
+    width: '36px',
+    height: '36px',
+    minWidth: '36px',
+    minHeight: '36px',
+    maxWidth: '36px',
+    maxHeight: '36px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backdropFilter: 'blur(4px)',
+    transition: 'all 0.2s ease',
+    padding: '0',
+    margin: '0',
+    fontSize: '16px',
+    fontFamily: 'inherit',
+    fontWeight: 'normal',
+    lineHeight: 'normal',
+    letterSpacing: 'normal',
+    boxSizing: 'border-box',
+  });
+}
+
+function createButtonIcons(button) {
+  const expandIcon = document.createElement('span');
+  expandIcon.className = 'icon-expand';
+  expandIcon.textContent = '⛶';
+  expandIcon.style.display = 'block';
+
+  const collapseIcon = document.createElement('span');
+  collapseIcon.className = 'icon-collapse';
+  collapseIcon.textContent = '◱';
+  collapseIcon.style.display = 'none';
+
+  button.appendChild(expandIcon);
+  button.appendChild(collapseIcon);
+}
+
+function attachButtonEventListeners(button, viewInfo) {
+  button.addEventListener('mouseenter', () => {
+    button.style.background = 'rgba(0, 0, 0, 0.7)';
+  });
+
+  button.addEventListener('mouseleave', () => {
+    button.style.background = 'rgba(0, 0, 0, 0.5)';
+  });
+
+  button.addEventListener('mousedown', () => {
+    button.style.transform = 'scale(0.95)';
+  });
+
+  button.addEventListener('mouseup', () => {
+    button.style.transform = 'scale(1)';
+  });
+
+  button.addEventListener('click', async () => {
+    await ipcRenderer.invoke('toggle-supersize', viewInfo.position);
+  });
+}
+
+function createUIControls(viewInfo) {
+  removeExistingControls();
+
+  const container = createControlsContainer();
+
+  const dropdown = createProviderDropdown();
+  styleDropdown(dropdown);
+  populateDropdownOptions(dropdown, viewInfo);
+  attachDropdownEventListeners(dropdown, viewInfo);
+
+  const button = createSupersizeButton();
+  styleButton(button);
+  createButtonIcons(button);
+  attachButtonEventListeners(button, viewInfo);
+
+  container.appendChild(dropdown);
+  container.appendChild(button);
+  document.body.appendChild(container);
+}
+
+function setupViewInfoListener(createUIControlsFn) {
+  let viewInfo = null;
+
+  ipcRenderer.on('view-info', (event, info) => {
+    viewInfo = info;
+    if (document.body) {
+      createUIControlsFn(info);
+    }
+  });
+
+  return () => viewInfo;
+}
+
+function setupSupersizeListener() {
+  ipcRenderer.on('supersize-state-changed', (event, supersizedPosition) => {
+    const button = document.getElementById('omnichat-supersize-btn');
+    const viewInfoGetter = window.omnichatGetViewInfo;
+
+    if (!button || !viewInfoGetter) return;
+
+    const viewInfo = viewInfoGetter();
+    if (!viewInfo) return;
+
+    const expandIcon = button.querySelector('.icon-expand');
+    const collapseIcon = button.querySelector('.icon-collapse');
+
+    if (supersizedPosition === viewInfo.position) {
+      expandIcon.style.display = 'none';
+      collapseIcon.style.display = 'block';
+    } else {
+      expandIcon.style.display = 'block';
+      collapseIcon.style.display = 'none';
+    }
+  });
+}
+
+function createLoadingOverlay() {
+  const overlay = document.createElement('div');
+  overlay.id = 'omnichat-loading-overlay';
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    width: '100%',
+    height: '100%',
+    background: 'rgba(255, 255, 255, 0.9)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: '9999999',
+    backdropFilter: 'blur(4px)',
+  });
+
+  const spinner = document.createElement('div');
+  Object.assign(spinner.style, {
+    width: '50px',
+    height: '50px',
+    border: '4px solid rgba(0, 0, 0, 0.1)',
+    borderTop: '4px solid rgba(0, 0, 0, 0.6)',
+    borderRadius: '50%',
+    animation: 'omnichat-spin 1s linear infinite',
+  });
+
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes omnichat-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `;
+  document.head.appendChild(style);
+
+  overlay.appendChild(spinner);
+  document.body.appendChild(overlay);
+
+  return overlay;
+}
+
+function setupLoadingOverlay() {
+  let loadingOverlay = null;
+  if (document.body) {
+    loadingOverlay = createLoadingOverlay();
+  } else {
+    document.addEventListener('DOMContentLoaded', () => {
+      loadingOverlay = createLoadingOverlay();
+    });
+  }
+
+  window.addEventListener('load', () => {
+    if (loadingOverlay) {
+      loadingOverlay.style.opacity = '0';
+      loadingOverlay.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        if (loadingOverlay && loadingOverlay.parentNode) {
+          loadingOverlay.parentNode.removeChild(loadingOverlay);
+        }
+        loadingOverlay = null;
+      }, 300);
+    }
+  });
+}
+
+function waitForDOM(callback) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', callback);
+  } else {
+    callback();
+  }
+}
+
+module.exports = {
+  loadConfig,
+  findElement,
+  createSubmitHandler,
+  setupIPCListeners,
+  setupInputScanner,
+  createUIControls,
+  setupViewInfoListener,
+  setupSupersizeListener,
+  createLoadingOverlay,
+  setupLoadingOverlay,
+  waitForDOM,
+};
