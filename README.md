@@ -3,6 +3,8 @@
 Interact with multiple AI assistants simultaneously in a split-screen interface.
 Type once and send your prompts to ChatGPT, Claude, Gemini, Perplexity, and Grok at the same time.
 
+![OmniChat Screenshot](assets/screenshot.png)
+
 ## Based on PolyGPT
 
 OmniChat is a fork of [PolyGPT](https://github.com/ncvgl/polygpt) by [Nathan Cavaglione (ncvgl)](https://github.com/ncvgl). Huge thanks to Nathan for creating the original project!
